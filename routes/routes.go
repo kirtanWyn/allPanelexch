@@ -27,4 +27,8 @@ func SetupRouter(router *gin.Engine) {
 	router.GET("/", controller.Home)
 	router.GET("/health", controller.Health)
 
+	// Authentication Routes
+	router.POST("/ajaxfiles/logincheck.php", controller.LoginCheck)
+	router.POST("/api/login", controller.LoginCheck)
+
 }
