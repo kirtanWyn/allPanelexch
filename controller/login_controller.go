@@ -7,8 +7,10 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/kirtanwyn/allPanelexch/config"
 	"github.com/kirtanwyn/allPanelexch/model"
@@ -65,7 +67,7 @@ func LoginCheck(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Database error"})
 		return
 	}
-		log.Println("here am i 2")
+	log.Println("here am i 2")
 
 	// Handle empty salt (Migration path)
 	if (user.UserPasswordSalt == nil || *user.UserPasswordSalt == "") && (user.UserPasswordSaltKey == nil || *user.UserPasswordSaltKey == "") {
@@ -130,12 +132,28 @@ func LoginCheck(c *gin.Context) {
 						return
 					}
 				}
-				
+
 				// Set Session state for Auth Code Verification
-				// Note: Ideally handled via JWT or Redis sessions. We can set a temporary cookie for now.
-				c.SetCookie("CLIENT_AUTH_STATUS", "true", 300, "/", "", false, true)
-				c.SetCookie("CLIENT_AUTH_UID", strconv.Itoa(user.UserID), 300, "/", "", false, true)
-				
+				session := sessions.Default(c)
+				// session.Options(sessions.Options{
+				// 	Path:     "/",
+				// 	MaxAge:   60 * 60 * 24, // 24 hours
+				// 	HttpOnly: true,
+				// 	Secure:   false, // true in production with HTTPS
+				// })
+
+				session.Set("CLIENT_AUTH_STATUS", true)
+				session.Set("CLIENT_AUTH_UID", user.UserID)
+				// session.Save()
+				if err := session.Save(); err != nil {
+					log.Println("failed to save session:", err)
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"status":  "error",
+						"message": "Failed to create session",
+					})
+					return
+				}
+
 				c.JSON(http.StatusOK, gin.H{
 					"status":       "auth",
 					"user_auth_id": user.UserID,
@@ -146,25 +164,50 @@ func LoginCheck(c *gin.Context) {
 			dateTime := time.Now().Format("2006-01-02 15:04:05")
 
 			// Logging
-			db.Exec("INSERT INTO login_ip_address(user_id, ip_address, login_date_time, user_agent) VALUES(?, ?, ?, ?)", user.UserID, loginIPAddress, dateTime, userAgent)
-			db.Exec("INSERT INTO activity_log(user_id, username, ip_address, user_agent, date_time, log_type) VALUES(?, ?, ?, ?, ?, ?)", user.UserID, req.Username, loginIPAddress, userAgent, dateTime, "login")
+			_, err = db.Exec("INSERT INTO login_ip_address(user_id, ip_address, login_date_time, user_agent) VALUES(?, ?, ?, ?)", user.UserID, loginIPAddress, dateTime, userAgent)
+			if err != nil {
+				log.Println("Failed to log login ip address:", err)
+			}
+			_, err = db.Exec("INSERT INTO activity_log(user_id, username, ip_address, user_agent, date_time, log_type) VALUES(?, ?, ?, ?, ?, ?)", user.UserID, req.Username, loginIPAddress, userAgent, dateTime, "login")
+			if err != nil {
+				log.Println("Failed to log activity:", err)
+			}
 
 			loginRandomString := service.GenerateRandomString(18) // Simplified implementation
-			
+
 			// Token logic
 			firstTwoChars := ""
 			if len(userMaster.Name) >= 2 {
 				firstTwoChars = userMaster.Name[:2]
 			}
-			apiAuthToken := fmt.Sprintf("%s%s", firstTwoChars, service.GenerateRandomString(18))
+			//apiAuthToken := fmt.Sprintf("%s%s", firstTwoChars, service.GenerateRandomString(18))
+			apiAuthToken := strings.ToUpper(
+				fmt.Sprintf("%s%s", firstTwoChars, service.GenerateRandomString(18)),
+			)
 
-			db.Exec("UPDATE user_login_master SET loginString=?, api_auth_token=? WHERE Id=?", loginRandomString, apiAuthToken, user.UserID)
+			_, err = db.Exec("UPDATE user_login_master SET loginString=?, api_auth_token=? WHERE Id=?", loginRandomString, apiAuthToken, user.UserID)
+			if err != nil {
+				log.Println("Failed to update user login master:", err)
+			}
 
-			// Here, actual session generation logic would be applied (JWT or Session cookie)
-			c.SetCookie("CLIENT_LOGIN_STATUS", "true", 3600, "/", "", false, true)
-			c.SetCookie("CLIENT_LOGIN_ID", strconv.Itoa(user.UserID), 3600, "/", "", false, true)
-			c.SetCookie("LOGIN_ENC_ID", base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(user.UserID))), 3600, "/", "", false, true)
-			
+			// Save to Redis Session
+			session := sessions.Default(c)
+			session.Set("CLIENT_LOGIN_STATUS", true)
+			session.Set("CLIENT_LOGIN_ID", user.UserID)
+			session.Set("CLIENT_LOGIN_NAME", userMaster.Name)
+			session.Set("FIRST_PASSWORD_CHANGED", user.FirstPasswordChanged)
+			session.Set("LOGIN_ENC_ID", base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(user.UserID))))
+			session.Set("LOGIN_STRING", loginRandomString)
+			// session.Save()
+			if err := session.Save(); err != nil {
+				log.Println("failed to save session:", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"status":  "error",
+					"message": "Failed to create session",
+				})
+				return
+			}
+
 			c.JSON(http.StatusOK, gin.H{
 				"status":                 user.UserID,
 				"login_id":               base64.StdEncoding.EncodeToString([]byte(strconv.Itoa(user.UserID))),
@@ -172,10 +215,68 @@ func LoginCheck(c *gin.Context) {
 				"first_password_changed": user.FirstPasswordChanged,
 			})
 		} else {
-			c.SetCookie("temp_id", strconv.Itoa(user.UserID), 300, "/", "", false, true)
+			session := sessions.Default(c)
+			session.Set("temp_id", user.UserID)
+			// session.Save()
+			if err := session.Save(); err != nil {
+				log.Println("failed to save session:", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"status":  "error",
+					"message": "Failed to create session",
+				})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{"status": "skey"})
 		}
 	} else {
 		c.JSON(http.StatusOK, gin.H{"status": "NA"})
 	}
+}
+
+// Logout clears the user's authentication cookies and logs them out
+func Logout(c *gin.Context) {
+	// Clear the session from Redis
+	session := sessions.Default(c)
+	session.Clear()
+	session.Options(sessions.Options{
+		Path:   "/",
+		MaxAge: -1,
+	})
+	// session.Save()
+	if err := session.Save(); err != nil {
+		log.Println("failed to save session:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status":  "error",
+			"message": "Failed to create session",
+		})
+		return
+	}
+
+	// Since this might be called as an API or a direct link, we can handle both.
+	// If it's an AJAX call, return JSON. If it's a direct navigation, we can redirect.
+	// if c.GetHeader("Accept") == "application/json" || c.GetHeader("X-Requested-With") == "XMLHttpRequest" {
+	// 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Logged out successfully"})
+	// } else {
+	// 	// Redirect to the login page (legacy behavior)
+	// 	c.Redirect(http.StatusFound, "/login")
+	// }
+			c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Logged out successfully"})
+
+}
+
+
+func GetSession(c *gin.Context) {
+	session := sessions.Default(c)
+
+	c.JSON(200, gin.H{
+		"CLIENT_LOGIN_STATUS":     session.Get("CLIENT_LOGIN_STATUS"),
+		"CLIENT_LOGIN_ID":         session.Get("CLIENT_LOGIN_ID"),
+		"CLIENT_LOGIN_NAME":       session.Get("CLIENT_LOGIN_NAME"),
+		"FIRST_PASSWORD_CHANGED":  session.Get("FIRST_PASSWORD_CHANGED"),
+		"LOGIN_ENC_ID":            session.Get("LOGIN_ENC_ID"),
+		"LOGIN_STRING":            session.Get("LOGIN_STRING"),
+		"CLIENT_AUTH_STATUS":      session.Get("CLIENT_AUTH_STATUS"),
+		"CLIENT_AUTH_UID":         session.Get("CLIENT_AUTH_UID"),
+		"TEMP_ID":                 session.Get("temp_id"),
+	})
 }
