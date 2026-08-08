@@ -498,3 +498,58 @@ func Signup(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Signup successful", "user_id": userID})
 }
+
+type VerifySignupOTPRequest struct {
+	Email string `form:"email" json:"email" binding:"required"`
+	OTP   int    `form:"otp" json:"otp" binding:"required"`
+}
+
+func VerifySignupOTP(c *gin.Context) {
+	var req VerifySignupOTPRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid request parameters: " + err.Error()})
+		return
+	}
+
+	db := config.DB
+
+	var dbOTP sql.NullInt64
+	var isVerifiedNull sql.NullString
+	err := db.QueryRow("SELECT OTP_code, is_user_verified FROM user_master WHERE Email_ID = ?", req.Email).Scan(&dbOTP, &isVerifiedNull)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusOK, gin.H{"status": "error", "message": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Database error"})
+		return
+	}
+
+	if isVerifiedNull.Valid && isVerifiedNull.String == "yes" {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "User is already verified"})
+		return
+	}
+
+	// OTP is NULL
+	if !dbOTP.Valid {
+		c.JSON(http.StatusForbidden, gin.H{
+			"status":  "error",
+			"message": "OTP is not available or has expired",
+		})
+		return
+	}
+
+	if !dbOTP.Valid || dbOTP.Int64 != int64(req.OTP) {
+		c.JSON(http.StatusForbidden, gin.H{"status": "error", "message": "Invalid OTP"})
+		return
+	}
+
+	// Update user_master
+	_, err = db.Exec("UPDATE user_master SET is_user_verified = 'yes', user_verification_type = 'OTP', OTP_code = NULL WHERE Email_ID = ?", req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to update verification status"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "User verified successfully"})
+}
