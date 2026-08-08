@@ -104,7 +104,7 @@ func LoginCheck(c *gin.Context) {
 	// Fetch User Master Details
 	var userMaster model.UserMaster
 	err = db.QueryRow(`
-    SELECT Name, Status, user_verification_status, user_verification_type
+    SELECT Name, Status, user_verification_status, user_verification_type, is_user_verified
     FROM user_master
     WHERE Id=?
         `, user.UserID).Scan(
@@ -112,12 +112,14 @@ func LoginCheck(c *gin.Context) {
 		&userMaster.Status,
 		&userMaster.UserVerificationStatus,
 		&userMaster.UserVerificationType,
+		&userMaster.IsUserVerified,
 	)
 
 	// Check user verification configuration
 	// if userMaster.UserVerificationStatus == "DISABLED" ||
 	if userMaster.UserVerificationType == nil ||
-		*userMaster.UserVerificationType == "" {
+		*userMaster.UserVerificationType == "" ||
+		userMaster.IsUserVerified == "no" {
 
 		c.JSON(403, gin.H{
 			"status": "verification_pending",
@@ -479,7 +481,7 @@ func Signup(c *gin.Context) {
 		   api_auth_token,
 		   parentDL,parentMDL,parentSuperMDL,parentKingAdmin)
 	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err = tx.Exec(insertLoginQuery, userID, 1, req.Email, hashedPassword, pSalt, siteSalt, "", "",6,6,6,6)
+	_, err = tx.Exec(insertLoginQuery, userID, 1, req.Email, hashedPassword, pSalt, siteSalt, "", "", 6, 6, 6, 6)
 	if err != nil {
 		tx.Rollback()
 		log.Println("Failed to insert user_login_master:", err)
