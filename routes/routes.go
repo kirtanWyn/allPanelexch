@@ -39,7 +39,9 @@ func SetupRouter(router *gin.Engine) {
 
 	// Authentication Routes
 	// router.POST("/ajaxfiles/logincheck.php", controller.LoginCheck)
-	router.POST("/api/login", controller.LoginCheck)
+	router.POST("/signup", controller.Signup)
+	router.POST("/login", controller.LoginCheck)
+	router.POST("/change_password", controller.ChangePassword)
 	router.GET("/logout", controller.Logout)
 	// router.POST("/logout", controller.Logout)
 	router.GET("/get_session", controller.GetSession)

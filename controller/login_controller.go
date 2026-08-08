@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -101,9 +103,28 @@ func LoginCheck(c *gin.Context) {
 
 	// Fetch User Master Details
 	var userMaster model.UserMaster
-	err = db.QueryRow("SELECT Name, Status, user_verification_status, user_verification_type FROM user_master WHERE Id=?", user.UserID).Scan(
-		&userMaster.Name, &userMaster.Status, &userMaster.UserVerificationStatus, &userMaster.UserVerificationType,
+	err = db.QueryRow(`
+    SELECT Name, Status, user_verification_status, user_verification_type
+    FROM user_master
+    WHERE Id=?
+        `, user.UserID).Scan(
+		&userMaster.Name,
+		&userMaster.Status,
+		&userMaster.UserVerificationStatus,
+		&userMaster.UserVerificationType,
 	)
+
+	// Check user verification configuration
+	// if userMaster.UserVerificationStatus == "DISABLED" ||
+	if userMaster.UserVerificationType == nil ||
+		*userMaster.UserVerificationType == "" {
+
+		c.JSON(403, gin.H{
+			"status": "verification_pending",
+			"msg":    "User verification is remaining.",
+		})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Database error"})
 		return
@@ -126,7 +147,7 @@ func LoginCheck(c *gin.Context) {
 			// 2FA Check
 			authCheck := true // Replace with environment variable or config if needed
 			if userMaster.UserVerificationStatus == "ENABLED" && authCheck {
-				if userMaster.UserVerificationType == "Telegram" {
+				if *userMaster.UserVerificationType == "Telegram" {
 					if err := service.GenerateTelegramOTP(user.UserID); err != nil {
 						c.JSON(http.StatusOK, gin.H{"status": "telegram_error", "msg": err.Error()})
 						return
@@ -260,23 +281,218 @@ func Logout(c *gin.Context) {
 	// 	// Redirect to the login page (legacy behavior)
 	// 	c.Redirect(http.StatusFound, "/login")
 	// }
-			c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Logged out successfully"})
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Logged out successfully"})
 
 }
-
 
 func GetSession(c *gin.Context) {
 	session := sessions.Default(c)
 
 	c.JSON(200, gin.H{
-		"CLIENT_LOGIN_STATUS":     session.Get("CLIENT_LOGIN_STATUS"),
-		"CLIENT_LOGIN_ID":         session.Get("CLIENT_LOGIN_ID"),
-		"CLIENT_LOGIN_NAME":       session.Get("CLIENT_LOGIN_NAME"),
-		"FIRST_PASSWORD_CHANGED":  session.Get("FIRST_PASSWORD_CHANGED"),
-		"LOGIN_ENC_ID":            session.Get("LOGIN_ENC_ID"),
-		"LOGIN_STRING":            session.Get("LOGIN_STRING"),
-		"CLIENT_AUTH_STATUS":      session.Get("CLIENT_AUTH_STATUS"),
-		"CLIENT_AUTH_UID":         session.Get("CLIENT_AUTH_UID"),
-		"TEMP_ID":                 session.Get("temp_id"),
+		"CLIENT_LOGIN_STATUS":    session.Get("CLIENT_LOGIN_STATUS"),
+		"CLIENT_LOGIN_ID":        session.Get("CLIENT_LOGIN_ID"),
+		"CLIENT_LOGIN_NAME":      session.Get("CLIENT_LOGIN_NAME"),
+		"FIRST_PASSWORD_CHANGED": session.Get("FIRST_PASSWORD_CHANGED"),
+		"LOGIN_ENC_ID":           session.Get("LOGIN_ENC_ID"),
+		"LOGIN_STRING":           session.Get("LOGIN_STRING"),
+		"CLIENT_AUTH_STATUS":     session.Get("CLIENT_AUTH_STATUS"),
+		"CLIENT_AUTH_UID":        session.Get("CLIENT_AUTH_UID"),
+		"TEMP_ID":                session.Get("temp_id"),
 	})
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `form:"current_password" json:"current_password"`
+	NewPassword     string `form:"new_password" json:"new_password"`
+	ConfirmPassword string `form:"confirm_password" json:"confirm_password"`
+}
+
+func ChangePassword(c *gin.Context) {
+	session := sessions.Default(c)
+	userIDRaw := session.Get("CLIENT_LOGIN_ID")
+	if userIDRaw == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Unauthorized"})
+		return
+	}
+	userID := userIDRaw.(int)
+
+	var req ChangePasswordRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid request parameters"})
+		return
+	}
+
+	if req.CurrentPassword == "" {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Please Enter Current Password"})
+		return
+	}
+	if req.NewPassword == "" {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Please Enter New Password"})
+		return
+	}
+
+	db := config.DB
+	var emailID, userPassword, userPasswordSaltKey, userPasswordSalt string
+	err := db.QueryRow("SELECT Email_ID, Password, user_password_salt_key, user_password_salt FROM user_login_master WHERE UserID=?", userID).Scan(&emailID, &userPassword, &userPasswordSaltKey, &userPasswordSalt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusOK, gin.H{"status": "error", "message": "User not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Database error"})
+		return
+	}
+
+	saltedHash := service.HashPassword(req.CurrentPassword, userPasswordSaltKey, userPasswordSalt)
+	if userPassword != saltedHash {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Current Password is wrong."})
+		return
+	}
+
+	hasLowercase := regexp.MustCompile(`[a-z]`).MatchString(req.NewPassword)
+	hasUppercase := regexp.MustCompile(`[A-Z]`).MatchString(req.NewPassword)
+	hasNumber := regexp.MustCompile(`[0-9]`).MatchString(req.NewPassword)
+
+	if !hasLowercase || !hasUppercase || !hasNumber || len(req.NewPassword) < 5 || len(req.NewPassword) > 15 {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "The password must contain at least: 1 uppercase letter, 1 lowercase letter, 1 number and 8 to 15 characters needed."})
+		return
+	}
+
+	if req.ConfirmPassword == "" {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Please Enter Confirm Password"})
+		return
+	}
+
+	if req.NewPassword != req.ConfirmPassword {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Password and Confirm Password is not matched."})
+		return
+	}
+
+	pSalt := fmt.Sprintf("%d", rand.Intn(999999-111111)+111111)
+	siteSalt := "huhefcvringybh"
+	newSaltedHash := service.HashPassword(req.NewPassword, siteSalt, pSalt)
+
+	loginIPAddress := c.ClientIP()
+	if ip := c.GetHeader("X-Forwarded-For"); ip != "" {
+		loginIPAddress = strings.Split(ip, ",")[0]
+	}
+	userAgent := c.GetHeader("User-Agent")
+	dateTime := time.Now().Format("2006-01-02 15:04:05")
+
+	_, err = db.Exec("INSERT INTO activity_log(user_id, username, ip_address, user_agent, date_time, log_type) VALUES(?, ?, ?, ?, ?, ?)", userID, emailID, loginIPAddress, userAgent, dateTime, "password")
+	if err != nil {
+		log.Println("Failed to log activity:", err)
+	}
+
+	_, err = db.Exec("UPDATE user_login_master SET Password=?, Password2='', user_password_salt=?, user_password_salt_key=? WHERE UserID=?", newSaltedHash, pSalt, siteSalt, userID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Something went wrong, please try again."})
+		return
+	}
+
+	session.Clear()
+	session.Options(sessions.Options{Path: "/", MaxAge: -1})
+	session.Save()
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Password Changed Successfully"})
+}
+
+type SignupRequest struct {
+	FirstName       string `form:"first_name" json:"first_name" binding:"required"`
+	LastName        string `form:"last_name" json:"last_name" binding:"required"`
+	Dob             string `form:"dob" json:"dob" binding:"required"`
+	City            string `form:"city" json:"city" binding:"required"`
+	Phone           string `form:"phone" json:"phone" binding:"required"`
+	Email           string `form:"email" json:"email" binding:"required"`
+	Password        string `form:"password" json:"password" binding:"required"`
+	ConfirmPassword string `form:"confirm_password" json:"confirm_password" binding:"required"`
+	IAcceptRules    string `form:"i_accept_rules" json:"i_accept_rules" binding:"required"`
+}
+
+func Signup(c *gin.Context) {
+	var req SignupRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "Invalid request parameters: " + err.Error()})
+		return
+	}
+
+	if req.Password != req.ConfirmPassword {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Password and Confirm Password do not match"})
+		return
+	}
+
+	db := config.DB
+
+	// Check if Email (username) already exists
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM user_master WHERE Email_ID = ?", req.Email).Scan(&count)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Database error checking email"})
+		return
+	}
+	if count > 0 {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Username/Email already exists"})
+		return
+	}
+
+	// Generate OTP
+	otpCode := rand.Intn(999999-100000) + 100000
+
+	// Begin Transaction
+	tx, err := db.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to start transaction"})
+		return
+	}
+
+	// Insert into user_master
+	insertUserQuery := "INSERT INTO user_master (Name, LastName, DOB, City, Phone, Email_ID, is_accept_rule, OTP_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+	res, err := tx.Exec(insertUserQuery, req.FirstName, req.LastName, req.Dob, req.City, req.Phone, req.Email, req.IAcceptRules, otpCode)
+	if err != nil {
+		tx.Rollback()
+		log.Println("Failed to insert user_master:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to create user"})
+		return
+	}
+
+	userID, err := res.LastInsertId()
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to retrieve user ID"})
+		return
+	}
+
+	// Generate Password Hash and Salt
+	pSalt := fmt.Sprintf("%d", rand.Intn(999999-111111)+111111)
+	siteSalt := "huhefcvringybh"
+	hashedPassword := service.HashPassword(req.Password, siteSalt, pSalt)
+
+	// Insert into user_login_master
+	insertLoginQuery := `INSERT INTO user_login_master (
+	UserID,
+	 UserType,
+	  Email_ID,
+	   Password,
+	    user_password_salt,
+		 user_password_salt_key,
+		  loginString,
+		   api_auth_token,
+		   parentDL,parentMDL,parentSuperMDL,parentKingAdmin)
+	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err = tx.Exec(insertLoginQuery, userID, 1, req.Email, hashedPassword, pSalt, siteSalt, "", "",6,6,6,6)
+	if err != nil {
+		tx.Rollback()
+		log.Println("Failed to insert user_login_master:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to create login details"})
+		return
+	}
+
+	// Commit Transaction
+	err = tx.Commit()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "Failed to commit transaction"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Signup successful", "user_id": userID})
 }

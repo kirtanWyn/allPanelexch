@@ -26,7 +26,7 @@ type UserMaster struct {
 	Name                   string `json:"name" db:"Name"`
 	Status                 string `json:"status" db:"Status"` // In PHP compared as "1"
 	UserVerificationStatus string `json:"user_verification_status" db:"user_verification_status"`
-	UserVerificationType   string `json:"user_verification_type" db:"user_verification_type"`
+	UserVerificationType   *string `json:"user_verification_type" db:"user_verification_type"`
 }
 
 type LoginIPAddress struct {
