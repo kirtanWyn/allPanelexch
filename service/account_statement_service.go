@@ -13,6 +13,7 @@ type AccountStatementService interface {
 	GetAccountStatement(userID int, req dto.AccountStatementRequest) ([]dto.AccountStatementResponse, error)
 	GetAccountBetStatement(userID int, req dto.AccountBetStatementRequest) ([]dto.AccountBetStatementResponse, error)
 	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
+	GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error)
 }
 
 type accountStatementService struct {
@@ -133,4 +134,8 @@ func (s *accountStatementService) GetAccountBetStatement(userID int, req dto.Acc
 
 func (s *accountStatementService) GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error) {
 	return s.repo.GetCurrentBets(userID, req)
+}
+// <----------------
+func (s *accountStatementService) GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error) {
+	return s.repo.GetActivityLogs(userID, req)
 }

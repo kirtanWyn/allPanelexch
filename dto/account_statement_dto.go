@@ -41,12 +41,12 @@ type AccountBetStatementResponse struct {
 }
 
 type CurrentBetRequest struct {
-	SEcho          int    `form:"sEcho"`
-	IDisplayStart  int    `form:"iDisplayStart"`
-	IDisplayLength int    `form:"iDisplayLength"`
-	SSearch        string `form:"sSearch"`
-	ReportType     string `form:"report_type"` // "sports" or "casino"
-	BetType        string `form:"BetType"`     // "back" or "lay"
+	SEcho          int    `form:"sEcho" json:"sEcho"`
+	IDisplayStart  int    `form:"iDisplayStart" json:"iDisplayStart"`
+	IDisplayLength int    `form:"iDisplayLength" json:"iDisplayLength"`
+	SSearch        string `form:"sSearch" json:"sSearch"`
+	ReportType     string `form:"report_type" json:"report_type"` // "sports" or "casino"
+	BetType        string `form:"BetType" json:"BetType"`         // "back" or "lay"
 }
 
 type CurrentBetData struct {
@@ -69,4 +69,28 @@ type CurrentBetResponse struct {
 	TotalAmount          float64          `json:"total_amount"`
 	TotalBets            int              `json:"total_bets"`
 	Ttt                  string           `json:"ttt"`
+}
+
+type ActivityLogRequest struct {
+	SEcho          int    `form:"sEcho" json:"sEcho"`
+	IDisplayStart  int    `form:"iDisplayStart" json:"iDisplayStart"`
+	IDisplayLength int    `form:"iDisplayLength" json:"iDisplayLength"`
+	SSearch        string `form:"sSearch" json:"sSearch"`
+	FromDate       string `form:"from_date" json:"from_date"`
+	ToDate         string `form:"to_date" json:"to_date"`
+	ReportType     string `form:"report_type" json:"report_type"` // "endlogin" or "password"
+}
+
+type ActivityLogData struct {
+	User    string `json:"user"`
+	Date    string `json:"date"`
+	IP      string `json:"ip"`
+	Browser string `json:"browser"`
+}
+
+type ActivityLogResponse struct {
+	SEcho           int               `json:"sEcho"`
+	RecordsTotal    int               `json:"recordsTotal"`
+	RecordsFiltered int               `json:"recordsFiltered"`
+	Data            []ActivityLogData `json:"data"`
 }

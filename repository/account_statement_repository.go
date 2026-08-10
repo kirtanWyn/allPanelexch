@@ -3,6 +3,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type AccountStatementRepository interface {
 	GetAccountStatementReport6(userID int, fromDate string, toDate string) ([]dto.AccountStatementResponse, error)
 	GetAccountBetStatement(userID int, betTime, eventID, gameType, eventType, marketID, marketType string) ([]dto.AccountBetStatementResponse, error)
 	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
+	GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error)
 }
 
 type accountStatementRepository struct {
@@ -483,5 +485,77 @@ func (r *accountStatementRepository) GetAccountBetStatement(userID int, betTime,
 	}
 
 	return bets, nil
+}
+// <-------------------
+func (r *accountStatementRepository) GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error) {
+	queryCondition := ""
+
+	if req.ReportType == "endlogin" {
+		queryCondition += " AND log_type='login'"
+	}
+	if req.ReportType == "password" {
+		queryCondition += " AND log_type='password'"
+	}
+log.Println("req",req)
+log.Println("req.ReportType",req.ReportType)
+
+	search := ""
+	if req.SSearch != "" {
+		val := strings.ReplaceAll(req.SSearch, "=", "1!=1")
+		search += fmt.Sprintf(" AND (username LIKE '%%%s%%' OR ip_address LIKE '%%%s%%')", val, val)
+	}
+
+	countQuery := fmt.Sprintf("SELECT count(*) FROM activity_log as a WHERE a.user_id=%d AND DATE(a.date_time) >='%s' AND DATE(a.date_time) <='%s' %s %s", userID, req.FromDate, req.ToDate, queryCondition, search)
+	var totalRecords int
+	err := r.db.QueryRow(countQuery).Scan(&totalRecords)
+	if err != nil && err != sql.ErrNoRows {
+		return dto.ActivityLogResponse{}, err
+	}
+
+	var dataQuery string
+	if req.IDisplayLength == -1 {
+		dataQuery = fmt.Sprintf("SELECT username, date_time, ip_address, user_agent FROM activity_log as a WHERE a.user_id=%d AND DATE(a.date_time) >='%s' AND DATE(a.date_time) <='%s' %s %s ORDER BY a.date_time DESC", userID, req.FromDate, req.ToDate, queryCondition, search)
+	} else {
+		dataQuery = fmt.Sprintf("SELECT username, date_time, ip_address, user_agent FROM activity_log as a WHERE a.user_id=%d AND DATE(a.date_time) >='%s' AND DATE(a.date_time) <='%s' %s %s ORDER BY a.date_time DESC LIMIT %d OFFSET %d", userID, req.FromDate, req.ToDate, queryCondition, search, req.IDisplayLength, req.IDisplayStart)
+	}
+
+	rows, err := r.db.Query(dataQuery)
+	if err != nil {
+		return dto.ActivityLogResponse{}, err
+	}
+	defer rows.Close()
+
+	var data []dto.ActivityLogData
+	for rows.Next() {
+		var username, dateTimeStr, ipAddress, userAgent string
+		if err := rows.Scan(&username, &dateTimeStr, &ipAddress, &userAgent); err != nil {
+			return dto.ActivityLogResponse{}, err
+		}
+
+		if parsedTime, err := time.Parse("2006-01-02 15:04:05", dateTimeStr); err == nil {
+			dateTimeStr = parsedTime.Format("02-01-2006 15:04:05")
+		}
+
+		data = append(data, dto.ActivityLogData{
+			User:    username,
+			Date:    dateTimeStr,
+			IP:      ipAddress,
+			Browser: userAgent,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return dto.ActivityLogResponse{}, err
+	}
+
+	if data == nil {
+		data = make([]dto.ActivityLogData, 0)
+	}
+
+	return dto.ActivityLogResponse{
+		SEcho:           req.SEcho,
+		RecordsTotal:    totalRecords,
+		RecordsFiltered: totalRecords,
+		Data:            data,
+	}, nil
 }
 // <----------------------------

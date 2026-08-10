@@ -54,4 +54,8 @@ func SetupRouter(router *gin.Engine) {
 	router.POST("/account_bet_statement", controller.GetAccountBetStatement)
 	router.POST("/ajaxfiles/current_bet.php", controller.GetCurrentBets) 
 	router.POST("/current_bet", controller.GetCurrentBets)
+
+	// Activity Logs
+	router.POST("/ajaxfiles/activity_log.php", controller.GetActivityLogs)
+	router.POST("/activity_log", controller.GetActivityLogs)
 }
