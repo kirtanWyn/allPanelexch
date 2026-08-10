@@ -124,3 +124,30 @@ func GetActivityLogs(c *gin.Context) {
 
 	c.JSON(http.StatusOK, data) // Match DataTables flat format
 }
+
+func UpdateButtonValue(c *gin.Context) {
+	session := sessions.Default(c)
+	userIDRaw := session.Get("CLIENT_LOGIN_ID")
+	if userIDRaw == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Unauthorized or Session Expired"})
+		return
+	}
+	userID := userIDRaw.(int)
+
+	var req dto.UpdateButtonValueRequest
+	if err := c.ShouldBind(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Invalid request parameters"})
+		return
+	}
+
+	repo := repository.NewAccountStatementRepository(config.DB)
+	svc := service.NewAccountStatementService(repo)
+
+	data, err := svc.UpdateButtonValue(userID, req)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}

@@ -21,6 +21,7 @@ type AccountStatementRepository interface {
 	GetAccountBetStatement(userID int, betTime, eventID, gameType, eventType, marketID, marketType string) ([]dto.AccountBetStatementResponse, error)
 	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
 	GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error)
+	UpdateButtonValue(userID int, allButtonValue string, reqType string) error
 }
 
 type accountStatementRepository struct {
@@ -557,5 +558,16 @@ log.Println("req.ReportType",req.ReportType)
 		RecordsFiltered: totalRecords,
 		Data:            data,
 	}, nil
+}
+
+func (r *accountStatementRepository) UpdateButtonValue(userID int, allButtonValue string, reqType string) error {
+	btnCol := "button_value"
+	if reqType == "casino" {
+		btnCol = "casino_button_value"
+	}
+
+	query := fmt.Sprintf("UPDATE user_master SET %s = ? WHERE Id = ?", btnCol)
+	_, err := r.db.Exec(query, allButtonValue, userID)
+	return err
 }
 // <----------------------------

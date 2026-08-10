@@ -94,3 +94,13 @@ type ActivityLogResponse struct {
 	RecordsFiltered int               `json:"recordsFiltered"`
 	Data            []ActivityLogData `json:"data"`
 }
+
+type UpdateButtonValueRequest struct {
+	AllButtonValue string `form:"all_button_value" json:"all_button_value" binding:"required"`
+	Type           string `form:"type" json:"type"`
+}
+
+type UpdateButtonValueResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}

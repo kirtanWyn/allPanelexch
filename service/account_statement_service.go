@@ -14,6 +14,7 @@ type AccountStatementService interface {
 	GetAccountBetStatement(userID int, req dto.AccountBetStatementRequest) ([]dto.AccountBetStatementResponse, error)
 	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
 	GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error)
+	UpdateButtonValue(userID int, req dto.UpdateButtonValueRequest) (dto.UpdateButtonValueResponse, error)
 }
 
 type accountStatementService struct {
@@ -138,4 +139,19 @@ func (s *accountStatementService) GetCurrentBets(userID int, req dto.CurrentBetR
 // <----------------
 func (s *accountStatementService) GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error) {
 	return s.repo.GetActivityLogs(userID, req)
+}
+
+func (s *accountStatementService) UpdateButtonValue(userID int, req dto.UpdateButtonValueRequest) (dto.UpdateButtonValueResponse, error) {
+	err := s.repo.UpdateButtonValue(userID, req.AllButtonValue, req.Type)
+	if err != nil {
+		return dto.UpdateButtonValueResponse{
+			Status:  "ok",
+			Message: "Something went wrong,please try again later",
+		}, nil // returning nil error to match original PHP behavior (which always returns ok with error message)
+	}
+
+	return dto.UpdateButtonValueResponse{
+		Status:  "ok",
+		Message: "Button value Changed",
+	}, nil
 }
