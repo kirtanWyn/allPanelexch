@@ -58,4 +58,10 @@ func SetupRouter(router *gin.Engine) {
 	// Activity Logs
 	router.POST("/ajaxfiles/activity_log.php", controller.GetActivityLogs)
 	router.POST("/activity_log", controller.GetActivityLogs)
+
+	// Casino Results
+	router.POST("/ajaxfiles/casino_result.php", controller.GetCasinoResult)
+	router.POST("/casino_result", controller.GetCasinoResult)
+	router.POST("/ajaxfiles/get_result_cards.php", controller.GetResultCards)
+	router.POST("/get_result_cards", controller.GetResultCards)
 }
