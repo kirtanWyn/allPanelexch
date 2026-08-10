@@ -47,4 +47,9 @@ func SetupRouter(router *gin.Engine) {
 	// router.POST("/logout", controller.Logout)
 	router.GET("/get_session", controller.GetSession)
 
+	// Account Statements
+	router.POST("/ajaxfiles/account_statement.php", controller.GetAccountStatement)
+	router.POST("/ajaxfiles/account_bet_statement.php", controller.GetAccountBetStatement)
+	router.POST("/account_statement", controller.GetAccountStatement)
+	router.POST("/account_bet_statement", controller.GetAccountBetStatement)
 }
