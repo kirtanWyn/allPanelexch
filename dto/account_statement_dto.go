@@ -39,3 +39,34 @@ type AccountBetStatementResponse struct {
 	BetID        string  `json:"bet_id"`
 	TrClass      string  `json:"tr_class"`
 }
+
+type CurrentBetRequest struct {
+	SEcho          int    `form:"sEcho"`
+	IDisplayStart  int    `form:"iDisplayStart"`
+	IDisplayLength int    `form:"iDisplayLength"`
+	SSearch        string `form:"sSearch"`
+	ReportType     string `form:"report_type"` // "sports" or "casino"
+	BetType        string `form:"BetType"`     // "back" or "lay"
+}
+
+type CurrentBetData struct {
+	EventTypeLabel string  `json:"event_type_label"`
+	EventName      string  `json:"event_name"`
+	MarketName     string  `json:"market_name"`
+	Nation         string  `json:"nation"`
+	Datetime       string  `json:"datetime"`
+	UserRate       float64 `json:"user_rate"`
+	Amount         float64 `json:"amount"`
+	BetType        string  `json:"bet_type"`
+	Action         string  `json:"action"`
+}
+
+type CurrentBetResponse struct {
+	SEcho                int              `json:"sEcho"`
+	ITotalRecords        int              `json:"iTotalRecords"`
+	ITotalDisplayRecords int              `json:"iTotalDisplayRecords"`
+	AaData               []CurrentBetData `json:"aaData"`
+	TotalAmount          float64          `json:"total_amount"`
+	TotalBets            int              `json:"total_bets"`
+	Ttt                  string           `json:"ttt"`
+}

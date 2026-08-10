@@ -12,6 +12,7 @@ import (
 type AccountStatementService interface {
 	GetAccountStatement(userID int, req dto.AccountStatementRequest) ([]dto.AccountStatementResponse, error)
 	GetAccountBetStatement(userID int, req dto.AccountBetStatementRequest) ([]dto.AccountBetStatementResponse, error)
+	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
 }
 
 type accountStatementService struct {
@@ -128,4 +129,8 @@ func (s *accountStatementService) GetAccountBetStatement(userID int, req dto.Acc
 	}
 
 	return bets, nil
+}
+
+func (s *accountStatementService) GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error) {
+	return s.repo.GetCurrentBets(userID, req)
 }

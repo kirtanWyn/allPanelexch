@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kirtanwyn/allPanelexch/dto"
 )
@@ -17,6 +18,7 @@ type AccountStatementRepository interface {
 	GetAccountStatementReport5(userID int, fromDate string, toDate string) ([]dto.AccountStatementResponse, error)
 	GetAccountStatementReport6(userID int, fromDate string, toDate string) ([]dto.AccountStatementResponse, error)
 	GetAccountBetStatement(userID int, betTime, eventID, gameType, eventType, marketID, marketType string) ([]dto.AccountBetStatementResponse, error)
+	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
 }
 
 type accountStatementRepository struct {
@@ -136,6 +138,181 @@ func (r *accountStatementRepository) fetchStatement(query string, pop int, remar
 	}
 
 	return statements, nil
+}
+
+func (r *accountStatementRepository) GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error) {
+	queryCondition := ""
+	isCasino := 0
+
+	if req.ReportType == "sports" {
+		queryCondition += " AND event_type IN (1,2,4)"
+	}
+	if req.ReportType == "casino" {
+		isCasino = 1
+	}
+
+	if strings.ToLower(req.BetType) == "back" {
+		queryCondition += " AND (bet_type='Back' OR bet_type='Yes')"
+	}
+	if strings.ToLower(req.BetType) == "lay" {
+		queryCondition += " AND (bet_type='Lay' OR bet_type='No')"
+	}
+
+	today := time.Now().Format("2006-01-02")
+	queryCondition += fmt.Sprintf(" AND DATE(bet_time) = '%s'", today)
+
+	search := ""
+	if req.SSearch != "" {
+		val := strings.ReplaceAll(req.SSearch, "=", "1!=1")
+		search += fmt.Sprintf(" AND (event_type LIKE '%%%s%%' OR event_name LIKE '%%%s%%' OR market_name LIKE '%%%s%%' OR bet_odds LIKE '%%%s%%' OR bet_stack LIKE '%%%s%%')", val, val, val, val, val)
+	}
+
+	table := "bet_details"
+	if isCasino == 1 {
+		table = "bet_teen_details"
+	}
+
+	countQuery := fmt.Sprintf("SELECT count(*) as totrecord, COALESCE(sum(bet_stack), 0) as totamount FROM %s WHERE user_id=%d AND bet_status='1' %s %s", table, userID, queryCondition, search)
+	var totalRecords int
+	var totalAmount float64
+	err := r.db.QueryRow(countQuery).Scan(&totalRecords, &totalAmount)
+	if err != nil && err != sql.ErrNoRows {
+		return dto.CurrentBetResponse{}, err
+	}
+
+	var dataQuery string
+	if req.IDisplayLength == -1 {
+		dataQuery = fmt.Sprintf("SELECT * FROM %s WHERE user_id=%d AND bet_status='1' %s %s ORDER BY bet_time DESC", table, userID, queryCondition, search)
+	} else {
+		dataQuery = fmt.Sprintf("SELECT * FROM %s WHERE user_id=%d AND bet_status='1' %s %s ORDER BY bet_time DESC LIMIT %d OFFSET %d", table, userID, queryCondition, search, req.IDisplayLength, req.IDisplayStart)
+	}
+
+	rows, err := r.db.Query(dataQuery)
+	if err != nil {
+		return dto.CurrentBetResponse{}, err
+	}
+	defer rows.Close()
+
+	var data []dto.CurrentBetData
+	for rows.Next() {
+		// We'll scan everything into maps or dummy variables and only extract what's needed.
+		// Alternatively, just query the specific columns instead of SELECT *
+		// Since we didn't specify columns in SELECT *, we should use rows.Columns() approach
+		columns, _ := rows.Columns()
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return dto.CurrentBetResponse{}, err
+		}
+
+		var eventType, eventName, marketName, betType, marketType, betTimeStr, betStatus string
+		var betStack, betOdds float64
+		var betRuns, betRuns2 int
+
+		for i, col := range columns {
+			val := values[i]
+			if val == nil {
+				continue
+			}
+			strVal := fmt.Sprintf("%s", val)
+			switch v := val.(type) {
+			case []byte:
+				strVal = string(v)
+			case int64:
+				strVal = fmt.Sprintf("%d", v)
+			case float64:
+				strVal = fmt.Sprintf("%f", v)
+			}
+
+			switch col {
+			case "event_type":
+				eventType = strVal
+			case "event_name":
+				eventName = strVal
+			case "market_name":
+				marketName = strVal
+			case "bet_stack":
+				fmt.Sscanf(strVal, "%f", &betStack)
+			case "bet_type":
+				betType = strVal
+			case "bet_odds":
+				fmt.Sscanf(strVal, "%f", &betOdds)
+			case "bet_runs":
+				fmt.Sscanf(strVal, "%d", &betRuns)
+			case "bet_runs2":
+				fmt.Sscanf(strVal, "%d", &betRuns2)
+			case "market_type":
+				marketType = strVal
+			case "bet_status":
+				betStatus = strVal
+			case "bet_time":
+				betTimeStr = strVal
+			}
+		}
+
+		if betStatus == "1" {
+			betStatus = "Open"
+		} else if betStatus == "0" {
+			betStatus = "Closed"
+		} else {
+			betStatus = "Cancelled"
+		}
+
+		eventTypeLabel := ""
+		if eventType == "4" {
+			eventTypeLabel = "Cricket"
+		} else if eventType == "2" {
+			eventTypeLabel = "Tennis"
+		} else if eventType == "1" {
+			eventTypeLabel = "Soccer"
+		}
+
+		if marketType == "KHADO_ODDS" {
+			betOdds = float64(betRuns)
+			marketName += fmt.Sprintf("-%d", (betRuns2-betRuns)+1)
+		} else if betRuns > 0 {
+			marketName += fmt.Sprintf("/%.2f", betOdds)
+			betOdds = float64(betRuns)
+		}
+
+		if marketType == "BOOKMAKER_ODDS" {
+			betOdds = betOdds*100 - 100
+		}
+
+		// Re-format time "2006-01-02 15:04:05" to "02-01-2006 15:04:05"
+		if parsedTime, err := time.Parse("2006-01-02 15:04:05", betTimeStr); err == nil {
+			betTimeStr = parsedTime.Format("02-01-2006 15:04:05")
+		}
+
+		data = append(data, dto.CurrentBetData{
+			EventTypeLabel: eventTypeLabel,
+			EventName:      eventName,
+			MarketName:     marketName,
+			Nation:         marketName,
+			Datetime:       betTimeStr,
+			UserRate:       betOdds,
+			Amount:         betStack,
+			BetType:        betType,
+			Action:         "",
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return dto.CurrentBetResponse{}, err
+	}
+
+	return dto.CurrentBetResponse{
+		SEcho:                req.SEcho,
+		ITotalRecords:        totalRecords,
+		ITotalDisplayRecords: totalRecords,
+		AaData:               data,
+		TotalAmount:          totalAmount,
+		TotalBets:            totalRecords,
+		Ttt:                  "",
+	}, nil
 }
 
 // Define the reports based on the complex PHP logic.
@@ -307,3 +484,4 @@ func (r *accountStatementRepository) GetAccountBetStatement(userID int, betTime,
 
 	return bets, nil
 }
+// <----------------------------
