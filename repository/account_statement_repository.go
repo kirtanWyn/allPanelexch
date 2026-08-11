@@ -22,6 +22,10 @@ type AccountStatementRepository interface {
 	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
 	GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error)
 	UpdateButtonValue(userID int, allButtonValue string, reqType string) error
+	GetAccountBalance(userID int) (float64, error)
+	GetUnmatchedExposure(userID int) (float64, error)
+	GetTotalNetExposure(userID int) (float64, error)
+	GetTotalOnlyWinning(userID int) (float64, error)
 }
 
 type accountStatementRepository struct {
@@ -569,5 +573,59 @@ func (r *accountStatementRepository) UpdateButtonValue(userID int, allButtonValu
 	query := fmt.Sprintf("UPDATE user_master SET %s = ? WHERE Id = ?", btnCol)
 	_, err := r.db.Exec(query, allButtonValue, userID)
 	return err
+}
+
+func (r *accountStatementRepository) GetAccountBalance(userID int) (float64, error) {
+	var totalBalance sql.NullFloat64
+	query := "SELECT SUM(amount) as total_balance FROM accounts WHERE user_id=? AND status=1"
+	err := r.db.QueryRow(query, userID).Scan(&totalBalance)
+	if err != nil {
+		return 0, err
+	}
+	return totalBalance.Float64, nil
+}
+
+func (r *accountStatementRepository) GetUnmatchedExposure(userID int) (float64, error) {
+	var totalFancyMargin sql.NullFloat64
+	query := "SELECT SUM(bet_margin_used) as total_fancy_margin FROM unmatched_bet_details WHERE user_id=? AND bet_status=1"
+	err := r.db.QueryRow(query, userID).Scan(&totalFancyMargin)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, err
+	}
+	
+	fancyMargin := totalFancyMargin.Float64 * (-1)
+	
+	if fancyMargin == 0 {
+		var accountBalance sql.NullFloat64
+		accountQuery := "SELECT sum(amount) as total_account_balance FROM accounts WHERE user_id=?"
+		err = r.db.QueryRow(accountQuery, userID).Scan(&accountBalance)
+		if err != nil && err != sql.ErrNoRows {
+			return 0, err
+		}
+		if accountBalance.Float64 == 0 {
+			fancyMargin = 0
+		}
+	}
+	return fancyMargin, nil
+}
+
+func (r *accountStatementRepository) GetTotalNetExposure(userID int) (float64, error) {
+	var netExposure sql.NullFloat64
+	query := "SELECT SUM(exposure_amount) as total_net_exposure FROM exposure_details WHERE user_id=? AND exposure_amount < 0"
+	err := r.db.QueryRow(query, userID).Scan(&netExposure)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, err
+	}
+	return netExposure.Float64, nil
+}
+
+func (r *accountStatementRepository) GetTotalOnlyWinning(userID int) (float64, error) {
+	var netExposure sql.NullFloat64
+	query := "SELECT SUM(exposure_amount) as total_net_exposure FROM exposure_details WHERE user_id=? AND exposure_amount > 0"
+	err := r.db.QueryRow(query, userID).Scan(&netExposure)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, err
+	}
+	return netExposure.Float64, nil
 }
 // <----------------------------

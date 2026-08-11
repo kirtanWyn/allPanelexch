@@ -104,3 +104,10 @@ type UpdateButtonValueResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
+
+type RefreshBalanceResponse struct {
+	Status   string `json:"status"`
+	Balance  string `json:"balance"`
+	Exposure string `json:"exposure"`
+	Winning  string `json:"winning"`
+}

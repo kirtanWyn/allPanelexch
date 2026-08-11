@@ -68,4 +68,8 @@ func SetupRouter(router *gin.Engine) {
 	router.POST("/casino_result", controller.GetCasinoResult)
 	router.POST("/ajaxfiles/get_result_cards.php", controller.GetResultCards)
 	router.POST("/get_result_cards", controller.GetResultCards)
+
+	// Balance
+	router.POST("/ajaxfiles/refresh_balance.php", controller.RefreshBalance)
+	router.POST("/refresh_balance", controller.RefreshBalance)
 }

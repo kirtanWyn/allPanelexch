@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -15,6 +16,7 @@ type AccountStatementService interface {
 	GetCurrentBets(userID int, req dto.CurrentBetRequest) (dto.CurrentBetResponse, error)
 	GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error)
 	UpdateButtonValue(userID int, req dto.UpdateButtonValueRequest) (dto.UpdateButtonValueResponse, error)
+	RefreshBalance(userID int) (dto.RefreshBalanceResponse, error)
 }
 
 type accountStatementService struct {
@@ -153,5 +155,53 @@ func (s *accountStatementService) UpdateButtonValue(userID int, req dto.UpdateBu
 	return dto.UpdateButtonValueResponse{
 		Status:  "ok",
 		Message: "Button value Changed",
+	}, nil
+}
+
+func formatFloat(val float64) string {
+	if math.Floor(val) == val {
+		return fmt.Sprintf("%.0f", val)
+	}
+	return fmt.Sprintf("%.2f", val)
+}
+
+func (s *accountStatementService) RefreshBalance(userID int) (dto.RefreshBalanceResponse, error) {
+	accountBalance, err := s.repo.GetAccountBalance(userID)
+	if err != nil {
+		return dto.RefreshBalanceResponse{}, err
+	}
+
+	unmatchedExposureBalance, err := s.repo.GetUnmatchedExposure(userID)
+	if err != nil {
+		return dto.RefreshBalanceResponse{}, err
+	}
+
+	exposureBalance, err := s.repo.GetTotalNetExposure(userID)
+	if err != nil {
+		return dto.RefreshBalanceResponse{}, err
+	}
+
+	exposureWinningBalance, err := s.repo.GetTotalOnlyWinning(userID)
+	if err != nil {
+		return dto.RefreshBalanceResponse{}, err
+	}
+
+	checkPlusExpo := exposureBalance + unmatchedExposureBalance
+	if checkPlusExpo > 0 {
+		_ = accountBalance
+	} else {
+		_ = accountBalance + exposureBalance + unmatchedExposureBalance
+	}
+
+	exposureBalance = exposureBalance * (-1)
+	unmatchedExposureBalance = unmatchedExposureBalance * (-1)
+
+	exposure := exposureBalance + unmatchedExposureBalance
+
+	return dto.RefreshBalanceResponse{
+		Status:   "ok",
+		Balance:  formatFloat(accountBalance),
+		Exposure: formatFloat(exposure),
+		Winning:  fmt.Sprintf("%.2f", exposureWinningBalance),
 	}, nil
 }
