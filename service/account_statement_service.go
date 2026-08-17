@@ -17,6 +17,7 @@ type AccountStatementService interface {
 	GetActivityLogs(userID int, req dto.ActivityLogRequest) (dto.ActivityLogResponse, error)
 	UpdateButtonValue(userID int, req dto.UpdateButtonValueRequest) (dto.UpdateButtonValueResponse, error)
 	RefreshBalance(userID int) (dto.RefreshBalanceResponse, error)
+	GetButtonValue(userID int) (dto.GetButtonValueResponse, error)
 }
 
 type accountStatementService struct {
@@ -203,5 +204,17 @@ func (s *accountStatementService) RefreshBalance(userID int) (dto.RefreshBalance
 		Balance:  formatFloat(accountBalance),
 		Exposure: formatFloat(exposure),
 		Winning:  fmt.Sprintf("%.2f", exposureWinningBalance),
+	}, nil
+}
+
+func (s *accountStatementService) GetButtonValue(userID int) (dto.GetButtonValueResponse, error) {
+	buttonValue, casinoButtonValue, err := s.repo.GetButtonValue(userID)
+	if err != nil {
+		return dto.GetButtonValueResponse{Status: "error"}, err
+	}
+	return dto.GetButtonValueResponse{
+		Status:            "ok",
+		ButtonValue:       buttonValue,
+		CasinoButtonValue: casinoButtonValue,
 	}, nil
 }

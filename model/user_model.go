@@ -24,10 +24,39 @@ type UserLoginMaster struct {
 type UserMaster struct {
 	ID                     int    `json:"id" db:"Id"`
 	Name                   string `json:"name" db:"Name"`
-	Status                 string `json:"status" db:"Status"` // In PHP compared as "1"
+	Status                 int    `json:"status" db:"Status"`
+	BetStatus              int    `json:"bet_status" db:"bet_status"`
+	FancyBetStatus         int    `json:"fancy_bet_status" db:"fancy_bet_status"`
+	ParentDL               int    `json:"parent_dl" db:"parentDL"`
+	ParentMDL              int    `json:"parent_mdl" db:"parentMDL"`
+	ParentSuperMDL         int    `json:"parent_super_mdl" db:"parentSuperMDL"`
+	ParentKingAdmin        int    `json:"parent_king_admin" db:"parentKingAdmin"`
+	SoccerAccess           int    `json:"soccer_access" db:"soccer_access"`
+	TennisAccess           int    `json:"tennis_access" db:"tennis_access"`
+	MinStake               int    `json:"min_stake" db:"min_stake"`
+	MaxStake               int    `json:"max_stake" db:"max_stake"`
+	MinCricketStake        int    `json:"min_cricket_stake" db:"min_cricket_stake"`
+	MaxCricketStake        int    `json:"max_cricket_stake" db:"max_cricket_stake"`
+	MinSoccerStake         int    `json:"min_soccer_stake" db:"min_soccer_stake"`
+	MaxSoccerStake         int    `json:"max_soccer_stake" db:"max_soccer_stake"`
+	MinTennisStake         int    `json:"min_tennis_stake" db:"min_tennis_stake"`
+	MaxTennisStake         int    `json:"max_tennis_stake" db:"max_tennis_stake"`
+	MinFancyStake          int    `json:"min_fancy_stake" db:"min_fancy_stake"`
+	MaxFancyStake          int    `json:"max_fancy_stake" db:"max_fancy_stake"`
+	NetExposureLimit       int    `json:"net_exposure_limit" db:"net_exposure_limit"`
+	MinimumOdds            int    `json:"minimum_odds" db:"minimum_odds"`
+	MaximumOdds            int    `json:"maximum_odds" db:"maximum_odds"`
+	BetEmailNotify         int    `json:"bet_email_notify" db:"bet_email_notify"`
 	UserVerificationStatus string `json:"user_verification_status" db:"user_verification_status"`
 	UserVerificationType   *string `json:"user_verification_type" db:"user_verification_type"`
-	IsUserVerified          string `json:"is_user_verified" db:"is_user_verified"`
+	IsUserVerified         string `json:"is_user_verified" db:"is_user_verified"`
+}
+
+// UserMasterParentStatus holds the status fields when querying parent hierarchy
+type UserMasterParentStatus struct {
+	Status       int `json:"status" db:"Status"`
+	BetStatus    int `json:"bet_status" db:"bet_status"`
+	FancyBetStatus int `json:"fancy_bet_status" db:"fancy_bet_status"`
 }
 
 type LoginIPAddress struct {

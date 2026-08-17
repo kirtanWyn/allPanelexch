@@ -26,6 +26,7 @@ type AccountStatementRepository interface {
 	GetUnmatchedExposure(userID int) (float64, error)
 	GetTotalNetExposure(userID int) (float64, error)
 	GetTotalOnlyWinning(userID int) (float64, error)
+	GetButtonValue(userID int) (string, string, error)
 }
 
 type accountStatementRepository struct {
@@ -629,3 +630,16 @@ func (r *accountStatementRepository) GetTotalOnlyWinning(userID int) (float64, e
 	return netExposure.Float64, nil
 }
 // <----------------------------
+
+func (r *accountStatementRepository) GetButtonValue(userID int) (string, string, error) {
+	var buttonValue, casinoButtonValue sql.NullString
+	query := "SELECT button_value, casino_button_value FROM user_master WHERE id=?"
+	err := r.db.QueryRow(query, userID).Scan(&buttonValue, &casinoButtonValue)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", "", nil
+		}
+		return "", "", err
+	}
+	return buttonValue.String, casinoButtonValue.String, nil
+}

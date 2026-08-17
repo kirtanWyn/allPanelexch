@@ -172,3 +172,24 @@ func RefreshBalance(c *gin.Context) {
 
 	c.JSON(http.StatusOK, data)
 }
+
+func GetButtonValue(c *gin.Context) {
+	session := sessions.Default(c)
+	userIDRaw := session.Get("CLIENT_LOGIN_ID")
+	if userIDRaw == nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": "Unauthorized or Session Expired"})
+		return
+	}
+	userID := userIDRaw.(int)
+
+	repo := repository.NewAccountStatementRepository(config.DB)
+	svc := service.NewAccountStatementService(repo)
+
+	data, err := svc.GetButtonValue(userID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"status": "error", "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, data)
+}

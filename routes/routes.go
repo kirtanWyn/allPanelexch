@@ -58,6 +58,8 @@ func SetupRouter(router *gin.Engine) {
 	// Button Value Change
 	router.POST("/ajaxfiles/button_value_change.php", controller.UpdateButtonValue)
 	router.POST("/button_value_change", controller.UpdateButtonValue)
+	router.GET("/ajaxfiles/get_button_value.php", controller.GetButtonValue)
+	router.GET("/get_button_value", controller.GetButtonValue)
 
 	// Activity Logs
 	router.POST("/ajaxfiles/activity_log.php", controller.GetActivityLogs)
@@ -72,4 +74,7 @@ func SetupRouter(router *gin.Engine) {
 	// Balance
 	router.POST("/ajaxfiles/refresh_balance.php", controller.RefreshBalance)
 	router.POST("/refresh_balance", controller.RefreshBalance)
+
+	// Bet Place
+
 }

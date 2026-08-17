@@ -111,3 +111,9 @@ type RefreshBalanceResponse struct {
 	Exposure string `json:"exposure"`
 	Winning  string `json:"winning"`
 }
+
+type GetButtonValueResponse struct {
+	Status            string `json:"status"`
+	ButtonValue       string `json:"button_value"`
+	CasinoButtonValue string `json:"casino_button_value"`
+}
